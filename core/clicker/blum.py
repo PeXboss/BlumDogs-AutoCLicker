@@ -8,6 +8,7 @@ from pynput.mouse import Button, Controller
 
 from typing import Tuple, Any
 from core.utils import Utilities
+from core.logger import logger
 from main.static import WINDOW_NOT_FOUND
 
 
@@ -37,12 +38,20 @@ class BlumClicker:
 
         :return: whether the input was handled
         """
+
         if keyboard.is_pressed("s") and self.paused:
             self.paused = False
+            logger.info("Started 5 threads.")
+            logger.info("Press 'p' for pausing the program.")
             await asyncio.sleep(0.2)
 
         elif keyboard.is_pressed("p"):
             self.paused = not self.paused
+            logger.info(
+                "Paused. To resume press 'p'"
+                if self.paused
+                else "Resumed. To pause press 'p'"
+            )
             await asyncio.sleep(0.2)
 
         return self.paused
@@ -80,12 +89,11 @@ class BlumClicker:
             r, g, b = screen.getpixel((x, y))
 
             greenish_range = (b < 125) and (102 <= r < 220) and (200 <= g < 255)
-            white_range = (r, g, b) == (255, 255, 255)  # Check for white pixels
 
-            if greenish_range or white_range:
+            if greenish_range:
                 screen_x = rect[0] + x
                 screen_y = rect[1] + y
-                await self.click(screen_x, screen_y)  # No offset for white pixels
+                await self.click(screen_x + 4, screen_y)
                 return True
 
         return False
@@ -115,6 +123,7 @@ class BlumClicker:
 
     async def run(self) -> None:
         """Runs the clicker."""
+
         try:
             window = next(
                 (
@@ -126,40 +135,28 @@ class BlumClicker:
             )
 
             if not window:
-                print(WINDOW_NOT_FOUND)
+                logger.error(WINDOW_NOT_FOUND)
                 return
 
-            print("Initialized blum-clicker!")
-            print(f"Found blum window: {window[0].title}")
-            print("Press 's' to start the program.")
-
-            rect = self.utils.get_rect(window[0])
-            # Oříznutí o 1 cm (přibližně 37 pixelů)
-            top_offset = 185
-            bottom_offset = 74
-
-            # Upravíme velikost obdélníku o 1 cm z horní a dolní části
-            new_rect = (
-                rect[0],
-                rect[1] + top_offset,
-                rect[2],
-                rect[3] - top_offset - bottom_offset,
-            )
+            logger.info("Initialized blum-clicker!")
+            logger.info(f"Found blum window: {window[0].title}")
+            logger.info("Press 's' to start the program.")
 
             while True:
                 if await self.handle_input():
                     continue
 
+                rect = self.utils.get_rect(window[0])
                 self.activate_window(window[0])
 
-                screenshot = self.utils.capture_screenshot(new_rect)
+                screenshot = self.utils.capture_screenshot(rect)
 
                 tasks = []
                 for _ in range(10):
-                    tasks.append(self.click_on_found(screenshot, new_rect))
+                    tasks.append(self.click_on_found(screenshot, rect))
 
                 await asyncio.gather(*tasks)
-                await self.click_on_play_button(screenshot, new_rect)
+                await self.click_on_play_button(screenshot, rect)
 
         except gw.PyGetWindowException as error:
-            print(f"The window might have been closed. Window error: {str(error)}.")
+            logger.error(f"The window might have been closed. Window error: {str(error)}.")
